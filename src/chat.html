@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat</title>
+</head>
+<body>
+    <h1>채팅방</h1>
+    <div id="chat"></div>
+    <input id="message" type="text">
+    <button onclick="sendMessage()">전송</button>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io({ path: '/socket.io' });
+
+        socket.on('connect', function() {
+            console.log('서버에 연결됨');
+        });
+
+        socket.on('msg', function(msg) {
+            const chat = document.getElementById('chat');
+            const msgElement = document.createElement('div');
+            msgElement.textContent = msg;
+            chat.appendChild(msgElement);
+            chat.scrollTop = chat.scrollHeight; // 새로운 메시지가 추가되면 스크롤을 아래로
+        });
+
+        function sendMessage() {
+            const input = document.getElementById('message');
+            const message = input.value;
+            if (message.trim()) {
+                // 클라이언트에서 메시지를 전송
+                socket.emit('msg', message);
+
+                // 클라이언트에서도 자신이 보낸 메시지를 화면에 출력
+                const chat = document.getElementById('chat');
+                const msgElement = document.createElement('div');
+                msgElement.textContent = '나: ' + message; // 자신의 메시지임을 표시
+                chat.appendChild(msgElement);
+                chat.scrollTop = chat.scrollHeight; // 새로운 메시지가 추가되면 스크롤을 아래로
+              
+                input.value = '';
+            }
+        }
+
+        // Enter 키로 메시지 전송하기
+        document.getElementById('message').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
