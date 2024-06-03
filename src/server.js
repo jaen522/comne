@@ -1,35 +1,66 @@
+var os = require('os');
+const path = require('path');
+const http = require('http');
 const express = require('express');
+const socketio = require('socket.io');
+const fromatMessage = require('./utils/messages');
+const { userJoin, getCurrentUser, userLeave, getRoomUsers } = require('./utils/users');
+
 const app = express();
+const server = http.createServer(app);
+const io = socketio(server);
 
-const port = 8080;
-const server = app.listen(port, function() {
-    console.log('Listening on ' + port);
-});
+app.use(express.static(path.join(__dirname, 'public')));
 
-const SocketIO = require('socket.io');
-const io = SocketIO(server, { path: '/socket.io' });
+const Announcement = '공지';
 
-app.use(express.static(__dirname)); // 현재 디렉토리에서 정적 파일 제공
+io.on('connection', socket => {
+    socket.on('joinRoom', ({ username, room }) => {
+        const user = userJoin(socket.id, username, room);
+        socket.join(user.room);
 
-app.get('/chat', function(req, res) {
-    res.sendFile(__dirname + '/chat.html');
-});
-
-io.on('connection', function(socket) {
-    console.log(socket.id + ' connected...');
-
-    // 채팅방에 들어온 메시지를 모든 사용자에게 방송
-    io.emit('msg', `${socket.id} has entered the chatroom.`);
-
-    // 메시지 수신
-    socket.on('msg', function(data) {
-        console.log(socket.id + ': ', data);
-        // 보낸 사람을 제외한 모든 사용자에게 메시지 방송
-        socket.broadcast.emit('msg', `${socket.id}: ${data}`);
+        socket.emit('message', fromatMessage(Announcement, '북적북적에 오신것을 환영합니다!!'));
+        socket.broadcast.to(user.room).emit('message', fromatMessage(Announcement, `${user.username}님이 입장하셨습니다.`));
+        
+        io.to(user.room).emit('roomUsers', {
+            room: user.room,
+            users: getRoomUsers(user.room)
+        });
     });
 
-    // 사용자 연결 해제
-    socket.on('disconnect', function() {
-        io.emit('msg', `${socket.id} has left the chatroom.`);
+    socket.on('chatMessage', (msg) => {
+        const user = getCurrentUser(socket.id);
+        io.to(user.room).emit('message', fromatMessage(user.username, msg));
+    });
+    
+    socket.on('disconnect', () => {
+        const user = userLeave(socket.id);
+        if(user) {
+            io.to(user.room).emit('message', fromatMessage(Announcement, `${user.username}님이 퇴장하셨습니다.`));
+        }
     });
 });
+
+const PORT = 3000 || process.env.PORT;
+
+server.listen(PORT, () => {
+    console.log(`Server has been running..!`);
+    console.log(`[Server address]\n- http://${getIp()}:${PORT}`);
+    console.log(`- http://127.0.0.1:${PORT}`);
+    console.log(`- http://localhost:${PORT}`);
+});
+
+function getIp() {
+    var ifaces = os.networkInterfaces();
+    var ip = '';
+    for (var dev in ifaces) {
+        var alias = 0;
+        ifaces[dev].forEach(function(details) {
+            if (details.family == 'IPv4' && details.internal === false) {
+                ip = details.address;
+                ++alias;
+            }
+        });
+    }
+    return ip;
+}
